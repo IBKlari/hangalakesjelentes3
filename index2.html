@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Jelentésvadász – szójáték</title>
+<style>
+  :root{
+    --bg1:#38bdf8;
+    --bg2:#a78bfa;
+    --card:#ffffff;
+    --text:#1e293b;
+    --muted:#64748b;
+    --accent:#f59e0b;
+    --green:#22c55e;
+    --red:#ef4444;
+    --blue:#2563eb;
+    --shadow:0 12px 30px rgba(0,0,0,.18);
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;
+    font-family:"Trebuchet MS","Comic Sans MS",Arial,sans-serif;
+    color:var(--text);
+    background:linear-gradient(135deg,var(--bg1),var(--bg2));
+    min-height:100vh;
+  }
+  .wrap{max-width:1020px;margin:0 auto;padding:14px}
+  .hero,.game{
+    background:rgba(255,255,255,.96);
+    border-radius:28px;
+    box-shadow:var(--shadow);
+    padding:18px;
+  }
+  .hero{margin-bottom:14px}
+  h1{margin:0 0 8px;text-align:center;font-size:clamp(1.7rem,3vw,2.5rem)}
+  .subtitle{margin:0 auto 14px;text-align:center;color:var(--muted);max-width:760px;line-height:1.5}
+  .topline{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+  .pill{display:inline-block;background:#fef3c7;color:#92400e;border-radius:999px;padding:7px 12px;font-weight:700;font-size:.95rem}
+  .scorebox{font-weight:700}
+  .topics{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}
+  .topic-btn,.main-btn,.option-btn{
+    border:none;border-radius:18px;cursor:pointer;transition:.18s ease;font-weight:700
+  }
+  .topic-btn{
+    padding:12px 10px;background:#e2e8f0;color:#334155;font-size:.98rem
+  }
+  .topic-btn.active{background:#1e293b;color:white;transform:translateY(-1px)}
+  .topic-btn:hover,.main-btn:hover,.option-btn:hover{transform:scale(1.02)}
+  .game{position:relative;overflow:hidden}
+  .meta{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  .meta small{display:block;color:var(--muted);margin-bottom:3px}
+  .meta strong{font-size:1.05rem}
+  .progress{height:14px;background:#dbeafe;border-radius:999px;overflow:hidden;margin:10px 0 18px}
+  .bar{height:100%;background:linear-gradient(90deg,#22c55e,#10b981);width:0%}
+  .question-card{background:linear-gradient(180deg,#eff6ff,#ffffff);border:2px solid #dbeafe;border-radius:24px;padding:18px;margin-bottom:14px}
+  .badge{display:inline-block;background:#dbeafe;color:#1d4ed8;border-radius:999px;padding:7px 12px;font-weight:700;margin-bottom:12px}
+  .question{font-size:clamp(1.25rem,2.7vw,1.8rem);line-height:1.4;font-weight:800}
+  .options{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin:14px 0}
+  .option-btn{
+    background:#ecfeff;border:3px solid #bae6fd;color:#0f172a;padding:16px;text-align:left;
+    min-height:84px;font-size:1.05rem;line-height:1.35
+  }
+  .option-btn.selected{background:#ede9fe;border-color:#8b5cf6}
+  .option-btn.correct{background:#dcfce7;border-color:#22c55e}
+  .option-btn.wrong{background:#fee2e2;border-color:#ef4444}
+  .feedback{border-radius:20px;padding:16px 18px;margin:8px 0 14px;line-height:1.55}
+  .feedback.good{background:#f0fdf4;border:2px solid #bbf7d0}
+  .feedback.bad{background:#fff7ed;border:2px solid #fed7aa}
+  .bottom{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+  .main-btn{padding:14px 20px;color:white;background:#1e293b;font-size:1rem}
+  .main-btn.secondary{background:#0284c7}
+  .main-btn.gold{background:#f59e0b;color:#1f2937}
+  .main-btn:disabled{background:#cbd5e1;color:#64748b;cursor:not-allowed;transform:none}
+  .result{text-align:center;padding:22px 10px}
+  .big{font-size:4rem;margin-bottom:6px}
+  .result p{font-size:1.15rem}
+  .streak{color:#b45309;font-weight:800}
+  canvas{position:fixed;inset:0;pointer-events:none;z-index:20}
+  .tiny{font-size:.92rem;color:var(--muted)}
+
+  @media (max-width: 860px){
+    .topics{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width: 640px){
+    .wrap{padding:10px}
+    .hero,.game{padding:14px;border-radius:22px}
+    .topics,.options{grid-template-columns:1fr}
+    .topic-btn,.main-btn,.option-btn{font-size:1.05rem}
+    .option-btn{min-height:78px;padding:16px 14px}
+    .bottom{align-items:stretch}
+    .bottom > *{width:100%}
+    .main-btn{width:100%}
+  }
+</style>
+</head>
+<body>
+<canvas id="confetti"></canvas>
+<div class="wrap">
+  <section class="hero">
+    <h1>Jelentésvadász 🎯</h1>
+    <p class="subtitle">Gyakorold játékosan az egyjelentésű, többjelentésű, azonos alakú, rokon értelmű, ellentétes jelentésű, hangutánzó és hangulatfestő szavakat!</p>
+    <div class="topics" id="topicButtons"></div>
+  </section>
+  <section class="game" id="app"></section>
+</div>
+
+<script>
+const topicLabels = {
+  mind: 'Összes témakör',
+  'egyjelentésű': 'Egyjelentésű',
+  'többjelentésű': 'Többjelentésű',
+  'azonos alakú': 'Azonos alakú',
+  'rokon értelmű': 'Rokon értelmű',
+  'ellentétes jelentésű': 'Ellentétes jelentésű',
+  'hangutánzó': 'Hangutánzó',
+  'hangulatfestő': 'Hangulatfestő'
+};
+
+const allQuestions = [
+  {topic:'egyjelentésű', q:'Melyik szó egyjelentésű?', o:['kilogramm','egér','levél','kar'], a:0, e:'A kilogramm hangalakjához egyetlen jelentés kapcsolódik.'},
+  {topic:'egyjelentésű', q:'Melyik szó egyjelentésű?', o:['asztalfiók','toll','nyelv','csiga'], a:0, e:'Az asztalfiók itt egy jelentésben szerepel.'},
+  {topic:'egyjelentésű', q:'Melyik szó egyjelentésű?', o:['oxigén','fül','láb','korona'], a:0, e:'Az oxigén tudományos fogalom, ebben a tananyagban egyjelentésű szó.'},
+  {topic:'egyjelentésű', q:'Melyik szó egyjelentésű?', o:['szarvasbogár','egér','barack','toll'], a:0, e:'A szarvasbogár itt egyetlen élőlényt jelöl.'},
+  {topic:'egyjelentésű', q:'Melyik szó egyjelentésű?', o:['violinkulcs','levél','dob','vár'], a:0, e:'A violinkulcs zenei szakkifejezés, ezért egyjelentésű.'},
+
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['levél','kilogramm','szarvasbogár','oxigén'], a:0, e:'A levél lehet növényi levél és írott üzenet is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['egér','liter','ablaküveg','centiméter'], a:0, e:'Az egér lehet állat és számítógépes eszköz is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['fül','golyóstoll','mosógép','vérnyomás'], a:0, e:'A fül lehet testrész, de lehet a bögre füle is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['körte','ütemhangsúlyos','gitárhúr','molekularács'], a:0, e:'A körte lehet gyümölcs és villanykörte is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['csiga','pihepárna','padlólap','képeskönyv'], a:0, e:'A csiga lehet állat és csavarvonal alakú dolog is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['nyelv','iskolapad','ablakkeret','kanapé'], a:0, e:'A nyelv lehet testrész és beszélt nyelv is.'},
+  {topic:'többjelentésű', q:'Melyik szó többjelentésű?', o:['toll','háztető','sárgabarack','gardróbszekrény'], a:0, e:'A toll lehet madártoll és írószer is.'},
+
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['vár','kilogramm','levél','szendereg'], a:0, e:'A vár lehet főnév is és ige is.'},
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['dob','nyelv','mandula','csiga'], a:0, e:'A dob lehet hangszer és ige is.'},
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['nyúl','körte','fül','egér'], a:0, e:'A nyúl lehet állat és ige is.'},
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['ég','láb','levél','barack'], a:0, e:'Az ég lehet főnév és ige is.'},
+  {topic:'azonos alakú', q:'Melyik mondatpár mutat azonos alakúságot?', o:['Régi vár áll a hegyen. / Zénó rád vár.','Leesett a levél. / Levelet írok.','Eltört a bögre füle. / Fáj a fülem.','Mozog az egér. / Kattints az egérrel.'], a:0, e:'Itt a vár egyik esetben főnév, a másikban ige.'},
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['fél','mandula','fül','daru'], a:0, e:'A fél lehet számnév, melléknév vagy igei alak.'},
+  {topic:'azonos alakú', q:'Melyik szó azonos alakú?', o:['tűz','levél','csiga','zebra'], a:0, e:'A tűz lehet főnév és ige is.'},
+
+  {topic:'rokon értelmű', q:'Melyik a szép rokon értelmű párja?', o:['gyönyörű','rút','hangos','lomha'], a:0, e:'A szép és a gyönyörű jelentése közel áll egymáshoz.'},
+  {topic:'rokon értelmű', q:'Melyik a siet rokon értelmű párja?', o:['igyekszik','késik','álldogál','nézelődik'], a:0, e:'Az igyekszik hasonló jelentésű, mint a siet.'},
+  {topic:'rokon értelmű', q:'Melyik a vidám rokon értelmű párja?', o:['derűs','borús','szomorú','komor'], a:0, e:'A vidám és a derűs hasonló hangulatot fejez ki.'},
+  {topic:'rokon értelmű', q:'Melyik a bátor rokon értelmű párja?', o:['merész','félénk','óvatos','csendes'], a:0, e:'A merész rokon értelmű a bátor szóval.'},
+  {topic:'rokon értelmű', q:'Melyik a szunyókál rokon értelmű párja?', o:['szendereg','lohol','beszélget','termetes'], a:0, e:'A szunyókál és a szendereg majdnem ugyanazt jelenti.'},
+  {topic:'rokon értelmű', q:'Melyik a bájos rokon értelmű párja?', o:['elbűvölő','hegyes','penge','csacsog'], a:0, e:'Az elbűvölő hasonló jelentésű a bájos szóval.'},
+  {topic:'rokon értelmű', q:'Melyik az okos rokon értelmű párja?', o:['értelmes','morgós','makacs','lusta'], a:0, e:'Az okos és az értelmes rokon értelmű szavak.'},
+  {topic:'rokon értelmű', q:'Melyik a gyors rokon értelmű párja?', o:['sebes','nehéz','lassú','nagy'], a:0, e:'A gyors és a sebes jelentése közel áll egymáshoz.'},
+
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a vidám szónak?', o:['szomorú','derűs','boldog','jókedvű'], a:0, e:'A vidám ellentétes jelentésű párja a szomorú.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a nedves szónak?', o:['száraz','vizes','modern','éles'], a:0, e:'A nedves és a száraz egymás ellentétei.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a világos szónak?', o:['sötét','fényes','szelíd','nappali'], a:0, e:'A világos ellentéte a sötét.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte az éber szónak?', o:['álmos','élénk','szorgalmas','nyitott'], a:0, e:'Az éber és az álmos egymás ellentétei.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a szelíd szónak?', o:['vad','kedves','mély','rút'], a:0, e:'A szelíd szó ellentéte a vad.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a kicsi szónak?', o:['nagy','apró','pici','csekély'], a:0, e:'A kicsi ellentéte a nagy.'},
+  {topic:'ellentétes jelentésű', q:'Melyik szó ellentéte a nyitott szónak?', o:['zárt','tágas','barátságos','éber'], a:0, e:'A nyitott ellentétes jelentésű párja a zárt.'},
+
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['kattog','kanalaz','kerget','erdő'], a:0, e:'A kattog hangalakja valódi hangot utánoz.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['csobog','ballag','törpe','magas'], a:0, e:'A csobog a víz hangját utánozza.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['berreg','vasgyúró','lomha','mütyüri'], a:0, e:'A berregés hangja hallhatóan megjelenik a szóban.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['cincog','bambul','nyakigláb','smucig'], a:0, e:'A cincog az egér hangját utánozza.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['kelepel','behemót','vigyorog','gagyi'], a:0, e:'A kelepel egy hangjelenséget másol.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['zizeg','lomha','fityfiritty','böhöm'], a:0, e:'A zizegő hang visszaköszön a szóban.'},
+  {topic:'hangutánzó', q:'Melyik hangutánzó szó?', o:['pöfög','nyurga','lagymatag','bumfordi'], a:0, e:'A pöfög hangalakja egy jellegzetes hangot utánoz.'},
+
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['cammog','cseng','kattog','nyávog'], a:0, e:'A cammog hangzása a lassú, nehézkes mozgást érzékelteti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['piszmog','berreg','kopog','süvít'], a:0, e:'A piszmog a lassú, pepecselő cselekvést érzékelteti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['nyurga','koccan','zizeg','pittyeg'], a:0, e:'A nyurga hangzása a hosszúkás termetet érzékelteti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['bambul','károg','cseng','pöfög'], a:0, e:'A bambul hangulata a céltalan bámulást érzékelteti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['lomha','cincog','dörög','zakatol'], a:0, e:'A lomha hangzása a lassúság érzetét kelti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['behemót','csobog','ketyeg','berreg'], a:0, e:'A behemót hangulata a nehézkes, nagy termetet érzékelteti.'},
+  {topic:'hangulatfestő', q:'Melyik hangulatfestő szó?', o:['toporzékol','pittyeg','kelepel','sziszeg'], a:0, e:'A toporzékol hangzása és hangulata a dühös mozgást érzékelteti.'}
+];
+
+let selectedTopic = 'mind';
+let questions = [];
+let currentIndex = 0;
+let score = 0;
+let selectedAnswer = null;
+let showResult = false;
+let streak = 0;
+let finished = false;
+
+const correctSound = new Audio('https://actions.google.com/sounds/v1/cartoon/clang_and_wobble.ogg');
+const wrongSound = new Audio('https://actions.google.com/sounds/v1/cartoon/wood_plank_flicks.ogg');
+const winSound = new Audio('https://actions.google.com/sounds/v1/crowds/large_crowd_cheer.ogg');
+
+function shuffle(arr){
+  const copy = [...arr];
+  for(let i = copy.length - 1; i > 0; i--){
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
+
+function shuffleQuestionOptions(question){
+  const correctValue = question.o[question.a];
+  const shuffledOptions = shuffle(question.o);
+  return {
+    ...question,
+    o: shuffledOptions,
+    a: shuffledOptions.indexOf(correctValue)
+  };
+}
+
+function filteredQuestions(){
+  const base = selectedTopic === 'mind'
+    ? [...allQuestions]
+    : allQuestions.filter(q => q.topic === selectedTopic);
+
+  return shuffle(base).map(q => shuffleQuestionOptions(q));
+}
+
+function resetQuiz(topic = selectedTopic){
+  selectedTopic = topic;
+  questions = filteredQuestions();
+  currentIndex = 0;
+  score = 0;
+  selectedAnswer = null;
+  showResult = false;
+  streak = 0;
+  finished = false;
+  renderTopics();
+  render();
+}
+
+function renderTopics(){
+  const box = document.getElementById('topicButtons');
+  box.innerHTML = '';
+  Object.entries(topicLabels).forEach(([key,label]) => {
+    const btn = document.createElement('button');
+    btn.className = 'topic-btn' + (selectedTopic === key ? ' active' : '');
+    btn.textContent = label;
+    btn.onclick = () => resetQuiz(key);
+    box.appendChild(btn);
+  });
+}
+
+function chooseAnswer(idx){
+  if(showResult) return;
+  selectedAnswer = idx;
+  render();
+}
+
+function checkAnswer(){
+  if(selectedAnswer === null) return;
+  showResult = true;
+  const q = questions[currentIndex];
+  if(selectedAnswer === q.a){
+    score++;
+    streak++;
+    safePlay(correctSound);
+    fireConfetti(streak >= 3 ? 140 : 70);
+    if(navigator.vibrate) navigator.vibrate(80);
+  } else {
+    streak = 0;
+    safePlay(wrongSound);
+    if(navigator.vibrate) navigator.vibrate([90,50,90]);
+  }
+  render();
+}
+
+function nextQuestion(){
+  if(currentIndex < questions.length - 1){
+    currentIndex++;
+    selectedAnswer = null;
+    showResult = false;
+  } else {
+    finished = true;
+    safePlay(winSound);
+    fireConfetti(220);
+  }
+  render();
+}
+
+function safePlay(sound){
+  sound.currentTime = 0;
+  sound.play().catch(() => {});
+}
+
+function resultText(){
+  const total = questions.length;
+  if(score === total) return 'Hibátlan munka! Te ma szóvarázsló voltál! ✨';
+  if(score >= Math.ceil(total * 0.8)) return 'Nagyon ügyes voltál! Igazi jelentésvadász vagy!';
+  if(score >= Math.ceil(total * 0.6)) return 'Szép munka! Még egy kör, és még jobb lesz!';
+  return 'Ügyesen próbálkoztál. Játssz újra, és gyűjts még több pontot!';
+}
+
+function render(){
+  const app = document.getElementById('app');
+
+  if(!questions.length){
+    app.innerHTML = '<div class="result"><div class="big">🤔</div><p>Nincs kérdés ebben a témakörben.</p></div>';
+    return;
+  }
+
+  if(finished){
+    app.innerHTML = `
+      <div class="result">
+        <div class="big">🏆</div>
+        <h2>Kész vagy!</h2>
+        <p><strong>${score}</strong> / ${questions.length} pont</p>
+        <p>${resultText()}</p>
+        <p class="tiny">Témakör: ${topicLabels[selectedTopic]}</p>
+        <div class="bottom" style="justify-content:center; margin-top:18px;">
+          <button class="main-btn gold" onclick="resetQuiz(selectedTopic)">Ugyanez újra</button>
+          <button class="main-btn secondary" onclick="resetQuiz('mind')">Összes témakör</button>
+        </div>
+      </div>`;
+    return;
+  }
+
+  const q = questions[currentIndex];
+  const progress = Math.round(((currentIndex + 1) / questions.length) * 100);
+
+  app.innerHTML = `
+    <div class="topline">
+      <span class="pill">${topicLabels[q.topic]}</span>
+      <div class="scorebox">Pont: ${score} &nbsp; | &nbsp; <span class="streak">Sorozat: ${streak}</span></div>
+    </div>
+
+    <div class="meta">
+      <div><small>Feladat</small><strong>${currentIndex + 1} / ${questions.length}</strong></div>
+      <div><small>Haladás</small><strong>${progress}%</strong></div>
+      <div><small>Játék mód</small><strong>${topicLabels[selectedTopic]}</strong></div>
+    </div>
+
+    <div class="progress"><div class="bar" style="width:${progress}%"></div></div>
+
+    <div class="question-card">
+      <div class="badge">Szóvadászat</div>
+      <div class="question">${q.q}</div>
+    </div>
+
+    <div class="options" id="optionsBox"></div>
+    <div id="feedbackBox"></div>
+
+    <div class="bottom">
+      <div class="tiny">Válassz egy lehetőséget, aztán kattints az ellenőrzésre!</div>
+      <button class="main-btn ${showResult ? 'secondary' : ''}" id="actionBtn" ${selectedAnswer === null && !showResult ? 'disabled' : ''}>
+        ${showResult ? (currentIndex < questions.length - 1 ? 'Következő feladat' : 'Eredményem') : 'Ellenőrzés'}
+      </button>
+    </div>
+  `;
+
+  const optionsBox = document.getElementById('optionsBox');
+  q.o.forEach((opt, idx) => {
+    const btn = document.createElement('button');
+    let cls = 'option-btn';
+    if(selectedAnswer === idx) cls += ' selected';
+    if(showResult && idx === q.a) cls += ' correct';
+    if(showResult && selectedAnswer === idx && idx !== q.a) cls += ' wrong';
+    btn.className = cls;
+    btn.textContent = opt;
+    btn.onclick = () => chooseAnswer(idx);
+    optionsBox.appendChild(btn);
+  });
+
+  if(showResult){
+    const ok = selectedAnswer === q.a;
+    document.getElementById('feedbackBox').innerHTML = `
+      <div class="feedback ${ok ? 'good' : 'bad'}">
+        <div><strong>${ok ? '✔️ Ügyes vagy!' : '❌ Most nem ez lett a jó válasz.'}</strong></div>
+        <div>Helyes válasz: <strong>${q.o[q.a]}</strong></div>
+        <div>${q.e}</div>
+        ${streak >= 3 && ok ? '<div><strong>Szuper sorozat! Három jó válasz egymás után! 🔥</strong></div>' : ''}
+      </div>`;
+  }
+
+  document.getElementById('actionBtn').onclick = showResult ? nextQuestion : checkAnswer;
+}
+
+// Confetti
+const canvas = document.getElementById('confetti');
+const ctx = canvas.getContext('2d');
+let confetti = [];
+let confettiTimer = null;
+
+function resizeCanvas(){
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+window.addEventListener('resize', resizeCanvas);
+resizeCanvas();
+
+function fireConfetti(count = 100){
+  confetti = [];
+  for(let i = 0; i < count; i++){
+    confetti.push({
+      x: Math.random() * canvas.width,
+      y: -20 - Math.random() * canvas.height * 0.3,
+      w: 6 + Math.random() * 7,
+      h: 8 + Math.random() * 8,
+      vx: -2 + Math.random() * 4,
+      vy: 2 + Math.random() * 4,
+      rot: Math.random() * 360,
+      vr: -6 + Math.random() * 12,
+      color: `hsl(${Math.random() * 360}, 95%, 60%)`
+    });
+  }
+  clearTimeout(confettiTimer);
+  confettiTimer = setTimeout(() => {
+    confetti = [];
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+  }, 2200);
+}
+
+function animate(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  confetti.forEach(p => {
+    p.x += p.vx;
+    p.y += p.vy;
+    p.rot += p.vr;
+    ctx.save();
+    ctx.translate(p.x,p.y);
+    ctx.rotate(p.rot * Math.PI / 180);
+    ctx.fillStyle = p.color;
+    ctx.fillRect(-p.w/2, -p.h/2, p.w, p.h);
+    ctx.restore();
+  });
+  confetti = confetti.filter(p => p.y < canvas.height + 30);
+  requestAnimationFrame(animate);
+}
+animate();
+
+resetQuiz('mind');
+</script>
+</body>
+</html>
